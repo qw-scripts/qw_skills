@@ -18,7 +18,7 @@ Just a basic Skill UI with some exports to add skills and skillchecks to your re
 
 ## Preview
 
-[YouTube Preview]('https://youtu.be/WuBCwTVLrCo')
+[https://youtu.be/WuBCwTVLrCo](https://youtu.be/WuBCwTVLrCo)
 
 ## Exports
 
