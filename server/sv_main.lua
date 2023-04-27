@@ -1,7 +1,39 @@
-local QBCore = exports['qb-core']:GetCoreObject()
+if Config.Framework == 'qb' then 
+    QBCore = exports['qb-core']:GetCoreObject()
+elseif Config.Framework == 'esx' then
+    ESX = exports['es_extended']:getSharedObject()
+end
+
 local SkillsCache = {}
 
-local function checkConfigForUpdates(result, CID)
+local queries = {
+    ['qb'] = {
+        UPDATE_SKILLS = 'UPDATE players SET skills = ? WHERE citizenid = ?',
+        SELECT_SKILLS = 'SELECT skills FROM players WHERE citizenid = ?'
+    },
+    ['esx'] = {
+        UPDATE_SKILLS = 'UPDATE users SET skills = ? WHERE identifier = ?',
+        SELECT_SKILLS = 'SELECT skills FROM users WHERE identifier = ?'
+    }
+}
+
+function GetPlayerData(src)
+    if Config.Framework == 'qb' then
+        return QBCore.Functions.GetPlayer(src)
+    elseif Config.Framework == 'esx' then 
+        return ESX.GetPlayerFromId(src)
+    end
+end
+
+function GetPlayerUID(Player)
+    if Config.Framework == 'qb' then
+        return Player.PlayerData.citizenid
+    elseif Config.Framework == 'esx' then 
+        return Player.identifier
+    end
+end
+
+local function checkConfigForUpdates(result, UID)
     local playerSkills = json.decode(result[1].skills)
 
     for i = 1, #Config.Skills do
@@ -23,27 +55,27 @@ local function checkConfigForUpdates(result, CID)
         end
     end
 
-    MySQL.update.await('UPDATE players SET skills = ? WHERE citizenid = ?', { json.encode(playerSkills), CID })
+    MySQL.update.await(queries[Config.Framework].UPDATE_SKILLS, { json.encode(playerSkills), UID })
 
     return json.encode(playerSkills)
 end
 
 lib.callback.register('qw_skills:server:getSkills', function(source)
     local src = source
-    local Player = QBCore.Functions.GetPlayer(src)
+    local Player = GetPlayerData(src)
 
     if not Player then return false end
-    local CID = Player.PlayerData.citizenid
+    local UID = GetPlayerUID(Player)
 
-    if SkillsCache[CID] then
-        return SkillsCache[CID]
+    if SkillsCache[UID] then
+        return SkillsCache[UID]
     end
 
-    local result = MySQL.query.await('SELECT skills FROM players WHERE citizenid = ?', { CID })
+    local result = MySQL.query.await(queries[Config.Framework].SELECT_SKILLS, { UID })
 
     if result and result[1].skills ~= '[]' then
-        SkillsCache[CID] = checkConfigForUpdates(result, CID)
-        return SkillsCache[CID]
+        SkillsCache[UID] = checkConfigForUpdates(result, UID)
+        return SkillsCache[UID]
     end
 
     local tempTable = {}
@@ -57,24 +89,24 @@ lib.callback.register('qw_skills:server:getSkills', function(source)
         }
     end
 
-    MySQL.update.await('UPDATE players SET skills = ? WHERE citizenid = ?', { json.encode(tempTable), CID })
+    MySQL.update.await(queries[Config.Framework].UPDATE_SKILLS, { json.encode(tempTable), UID })
 
-    SkillsCache[CID] = json.encode(tempTable)
+    SkillsCache[UID] = json.encode(tempTable)
 
-    return SkillsCache[CID]
+    return SkillsCache[UID]
 end)
 
 lib.callback.register('qw_skills:server:updateSkill', function(source, skill, progress)
     local src = source
-    local Player = QBCore.Functions.GetPlayer(src)
+    local Player = GetPlayerData(src)
 
     if not Player then return false end
 
     if not skill or not progress then return false end
 
-    local CID = Player.PlayerData.citizenid
+    local UID = GetPlayerUID(Player)
 
-    local playerSkills = json.decode(SkillsCache[CID])
+    local playerSkills = json.decode(SkillsCache[UID])
 
     for i = 1, #playerSkills do
         if playerSkills[i].name == skill then
@@ -87,14 +119,14 @@ lib.callback.register('qw_skills:server:updateSkill', function(source, skill, pr
         end
     end
 
-    SkillsCache[CID] = json.encode(playerSkills)
+    SkillsCache[UID] = json.encode(playerSkills)
 
-    return SkillsCache[CID]
+    return SkillsCache[UID]
 end)
 
 lib.callback.register('qw_skills:server:checkSkill', function(source, skill)
     local src = source
-    local Player = QBCore.Functions.GetPlayer(src)
+    local Player = GetPlayerData(src)
 
     if not Player then return false end
 
@@ -103,9 +135,9 @@ lib.callback.register('qw_skills:server:checkSkill', function(source, skill)
         return false
     end
 
-    local CID = Player.PlayerData.citizenid
+    local UID = GetPlayerUID(Player)
 
-    local playerSkills = json.decode(SkillsCache[CID])
+    local playerSkills = json.decode(SkillsCache[UID])
 
     for i = 1, #playerSkills do
         if playerSkills[i].name == skill then
@@ -116,36 +148,36 @@ lib.callback.register('qw_skills:server:checkSkill', function(source, skill)
     return false
 end)
 
-local function savePlayerSkills(CID)
-    local playerSkills = json.decode(SkillsCache[CID])
+local function savePlayerSkills(UID)
+    local playerSkills = json.decode(SkillsCache[UID])
 
-    MySQL.update.await('UPDATE players SET skills = ? WHERE citizenid = ?', { json.encode(playerSkills), CID })
+    MySQL.update.await(queries[Config.Framework].UPDATE_SKILLS, { json.encode(playerSkills), UID })
 end
 
 RegisterNetEvent('qw_skills:server:removePlayerFromCache', function()
     local src = source
-    local Player = QBCore.Functions.GetPlayer(src)
+    local Player = GetPlayerData(src)
 
     if not Player then return end
-    local CID = Player.PlayerData.citizenid
+    local UID = GetPlayerUID(Player)
 
-    if not SkillsCache[CID] then return end
+    if not SkillsCache[UID] then return end
 
-    savePlayerSkills(CID)
-    SkillsCache[CID] = nil
+    savePlayerSkills(UID)
+    SkillsCache[UID] = nil
 end)
 
 AddEventHandler('playerDropped', function()
     local src = source
-    local Player = QBCore.Functions.GetPlayer(src)
+    local Player = GetPlayerData(src)
 
     if not Player then return end
-    local CID = Player.PlayerData.citizenid
+    local UID = GetPlayerUID(Player)
 
-    if not SkillsCache[CID] then return end
+    if not SkillsCache[UID] then return end
 
-    savePlayerSkills(CID)
-    SkillsCache[CID] = nil
+    savePlayerSkills(UID)
+    SkillsCache[UID] = nil
 
-    print('saved skills for ' .. CID)
+    print('saved skills for ' .. UID)
 end)
