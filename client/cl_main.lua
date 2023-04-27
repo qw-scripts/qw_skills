@@ -1,4 +1,8 @@
-local QBCore = exports['qb-core']:GetCoreObject()
+if Config.Framework == 'qb' then 
+    QBCore = exports['qb-core']:GetCoreObject()
+elseif Config.Framework == 'esx' then
+    ESX = exports['es_extended']:getSharedObject()
+end
 
 local function fetchSkills()
     lib.callback('qw_skills:server:getSkills', false, function(skills)
@@ -54,13 +58,22 @@ RegisterNUICallback('hideUI', function(_, cb)
     SetNuiFocus(false, false)
 end)
 
-RegisterNetEvent('QBCore:Client:OnPlayerUnload', function()
-    TriggerServerEvent('qw_skills:server:removePlayerFromCache')
-end)
+if Config.Framework == 'qb' then 
+    RegisterNetEvent('QBCore:Client:OnPlayerUnload', function()
+        TriggerServerEvent('qw_skills:server:removePlayerFromCache')
+    end)
 
-RegisterNetEvent('QBCore:Client:OnPlayerLoaded', function()
-    fetchSkills()
-end)
+    RegisterNetEvent('QBCore:Client:OnPlayerLoaded', function()
+        fetchSkills()
+    end)
+end
+
+if Config.Framework == 'esx' then 
+    RegisterNetEvent('esx:playerLoaded')
+    AddEventHandler('esx:playerLoaded', function(playerData)
+        fetchSkills()
+    end)
+end
 
 AddEventHandler('onResourceStart', function(resource)
     if resource == GetCurrentResourceName() then
